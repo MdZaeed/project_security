@@ -34,7 +34,7 @@ The result: every LLM response comes with a cryptographic certificate that the m
 │   ├── zkllm_conn.py         # ZkLLM_conn: OPAL backend class
 │   ├── opal_cli_codex.py     # Modified: --config flag, --llm_backend zkllm
 │   └── config/               # YAML configs for 6 benchmark × info-source combos
-├── logs/                     # Captured stdout/stderr from batch runs
+├── logs/                     # Captured stdout/stderr from each batch run (one log per config)
 ├── zkllm_timing_results.csv  # Aggregated timing across all 6 valid runs
 └── zkllm_report.md           # Full technical report (setup, patches, results)
 ```
@@ -131,6 +131,37 @@ Each run produces `zkllm_proofs/proof_<timestamp>.json`:
   "total_time_s": 2152.39
 }
 ```
+
+## Run logs
+
+The `logs/` directory contains stdout/stderr captured from all runs.
+
+### `zkllm_batch.log` — successful sequential run (Apr 28, 03:02–06:03 UTC)
+
+The definitive run. Five configs executed back-to-back via `run_zkllm_batch.sh`; each completed in ~36 minutes with `proof_success=True`. The `accuracy_ia` config was run separately beforehand and is not in this log.
+
+```
+=== Starting accuracy_pc+rl at Tue Apr 28 03:02:29 AM UTC 2026 ===
+[zkLLM] Response: 513 tokens in 19.8s (25.85 tok/s).
+[zkLLM] Total: inference=19.8s  proof=2131.7s  total=2151.52s
+=== Finished accuracy_pc+rl at Tue Apr 28 03:38:39 AM UTC 2026 ===
+...
+=== All configs complete at Tue Apr 28 06:03:10 AM UTC 2026 ===
+```
+
+### Per-config logs — failed parallel runs (Apr 28, ~02:54 UTC)
+
+Four configs were launched simultaneously before the sequential-only constraint was understood. They all started at `02:54 UTC` and shared the `zkllm-workdir/`, corrupting each other's intermediate activation tensors. Proof times of 10–69 seconds (versus the expected ~35 minutes) confirm corrupted state; `zkllm_run_shmembench_pc+rl+ia.log` was cut off mid-execution.
+
+| Log file | Proof time | Outcome |
+|----------|-----------|---------|
+| `zkllm_run_accuracy_pc+rl.log` | 11.5s | Corrupted — discarded |
+| `zkllm_run_shmembench_rl.log` | 9.8s | Corrupted — discarded |
+| `zkllm_run_sobol_ia.log` | 68.7s | Corrupted — discarded |
+| `zkllm_run_sobol_pc+ia.log` | 40.6s | Corrupted — discarded |
+| `zkllm_run_shmembench_pc+rl+ia.log` | N/A | Killed mid-run |
+
+These logs are kept as evidence of the parallel-run failure mode and to document the workdir contention issue described in the patches section.
 
 ## Results
 
