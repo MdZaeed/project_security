@@ -195,3 +195,46 @@ Two bugs were fixed in the upstream code (patches stored in `zkllm-patches/`, ap
 See [`zkllm_report.md`](zkllm_report.md) for the full technical report covering cryptographic components, the per-layer proof structure, all setup steps, patch details, OPAL integration internals, and an extended results analysis.
 
 The upstream zkLLM paper: [arXiv:2404.16109](https://arxiv.org/abs/2404.16109) (ACM CCS 2024).
+
+## My contributions
+
+**`src/zkllm_conn.py` — ZkLLM OPAL backend**
+
+Implements `ZkLLM_conn`, the class that plugs zkLLM into OPAL as a drop-in LLM backend. It accepts any OPAL prompt (CUDA source + profiling context), runs LLaMA-2 inference via HuggingFace Transformers, then drives the full 32-layer zero-knowledge proof pipeline by invoking the compiled CUDA binaries in sequence (ppgen → commit → rmsnorm → self-attn → ffn → skip-connection). After each run it writes a structured JSON record to `zkllm_proofs/` capturing model name, prompt and response token counts, inference time, proof time, total time, tokens per second, per-layer proof health, and a `proof_success` boolean. The class exposes the same interface as other OPAL backends so it can be selected with `--llm_backend zkllm` without changes to the rest of the pipeline.
+
+**`src/opal_cli_codex.py` — OPAL CLI with zkLLM support**
+
+Modified version of the OPAL command-line entry point. Added a `--config` flag that loads a YAML file specifying the benchmark, info-source combination, and all backend parameters, so each of the six experiment configurations can be run without editing code. Added `--llm_backend zkllm` routing and the five `--zkllm_*` flags (`--zkllm_model_size`, `--zkllm_seq_len`, `--zkllm_max_new_tokens`, `--zkllm_dir`, `--zkllm_proof_dir`). The script reads the target CUDA kernel and profiling data, constructs the OPAL prompt, dispatches it to the selected backend, and prints the optimized kernel suggestion along with a summary of proof metadata.
+
+**Building and fixing the upstream zkLLM repo**
+
+Compiled the upstream CUDA codebase from source and resolved two bugs that prevented it from running (see [Patches applied to upstream zkLLM](#patches-applied-to-upstream-zkllm)). Also patched the Makefile to target `sm_80` (A100) instead of `sm_86` and to use the system `nvcc` rather than a hardcoded path.
+
+**Timing experiments across prompt sizes**
+
+Ran all six benchmark × info-source configurations (prompt sizes ranging from 3,353 to 10,652 tokens) sequentially and recorded per-run timing. Results are in `zkllm_timing_results.csv` and summarised in the Results table above.
+
+**Model variant testing**
+
+Tested the proof pipeline with three additional model variants beyond the baseline LLaMA-2 7B: LLaMA-2 13B, LLaMA-3 7B, and a fine-tuned LLaMA-2 7B. Results and failure modes are documented in the findings below.
+
+## Findings
+
+**Not feasible for production LLM calls**
+End-to-end latency is ~36 minutes per query — ~20 seconds for inference and ~35 minutes for proof generation. This rules out any interactive or latency-sensitive use case.
+
+**Proof generation does not scale across multiple GPUs**
+Despite the paper framing the system as scalable, the proof runs entirely on a single GPU and cannot be parallelised across multiple devices. It does saturate 100% of that one GPU throughout the ~35-minute proof window.
+
+**Does not work with LLaMA-3 or newer architectures**
+The CUDA proof kernels are written specifically for the LLaMA-2 transformer architecture. LLaMA-3 and other updated transformer variants use different attention and normalisation implementations that are incompatible with the current proof code; attempts to run them fail at the proof stage.
+
+**High VRAM requirements**
+
+| Model | VRAM required | Breakdown |
+|-------|--------------|-----------|
+| LLaMA-2 7B | ~52 GB | ~16 GB model weights + ~26 GB proof intermediates + ~10 GB packages/runtime |
+| LLaMA-2 13B | ~120 GB | same breakdown, scaled |
+
+**Context length is hard-capped at 2048 tokens**
+The proof pipeline pads every input sequence to exactly 2048 tokens regardless of actual length. Requesting a response longer than 2048 tokens causes the proof to go out of bounds and fail. This means the combined prompt + response must fit within 2048 tokens.
