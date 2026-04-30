@@ -1,0 +1,7 @@
+config,benchmark,info_source,prompt_tokens,response_tokens,total_tokens,inference_time_s,tokens_per_sec,proof_time_s,total_time_s,proof_success,layers_proved,response_words,has_code_block,code_block_lines
+accuracy_ia_zkllm,accuracy,ia,4401,513,4914,19.9,25.78,2100.23,2120.13,True,33,77,False,0
+accuracy_pc+rl_zkllm,accuracy,pc+rl,10652,513,11165,19.85,25.85,2131.67,2151.52,True,33,77,False,0
+sobol_ia_zkllm,sobol,ia,3353,512,3865,19.86,25.78,2133.13,2152.99,True,33,163,False,0
+sobol_pc+ia_zkllm,sobol,pc+ia,5065,513,5578,19.78,25.93,2136.64,2156.42,True,33,137,False,0
+shmembench_rl_zkllm,shmembench,rl,3759,514,4273,19.83,25.92,2133.07,2152.9,True,33,334,False,0
+shmembench_pc+rl+ia_zkllm,shmembench,pc+rl+ia,7389,512,7901,19.79,25.87,2132.6,2152.39,True,33,103,False,0

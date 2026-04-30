@@ -1,0 +1,21 @@
+source_file: ../input/shmembench/shmem_kernels.cu
+summaries_config: ./config/shmembench_rl_gpt5_summaries.json
+
+llm: "meta-llama/Llama-2-7b-hf"
+llm_backend: "zkllm"
+name: shmembench_rl_zkllm
+app_name: shmembench-cuda-zkllm
+
+zkllm_model_size: 7
+zkllm_seq_len: 2048
+zkllm_max_new_tokens: 512
+zkllm_dir: "../zkllm"
+zkllm_proof_dir: "../zkllm_proofs"
+
+output_dir: ./results/shmembench-zkllm
+output_file: ./results_zkllm.csv
+build_fix_iterations: 3
+build_out_file: build.out
+build_err_file: build.err
+build_error_summary_lines: 80
+build_error_summary_chars: 8000

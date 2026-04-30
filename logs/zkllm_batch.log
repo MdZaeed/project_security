@@ -1,0 +1,162 @@
+nohup: ignoring input
+=== Starting accuracy_pc+rl at Tue Apr 28 03:02:29 AM UTC 2026 ===
+/home/cup7/miniconda3/envs/zkllm-env/lib/python3.11/site-packages/transformers/utils/generic.py:441: FutureWarning: `torch.utils._pytree._register_pytree_node` is deprecated. Please use `torch.utils._pytree.register_pytree_node` instead.
+  _torch_pytree._register_pytree_node(
+/home/cup7/miniconda3/envs/zkllm-env/lib/python3.11/site-packages/huggingface_hub/file_download.py:949: FutureWarning: `resume_download` is deprecated and will be removed in version 1.0.0. Downloads always resume when possible. If you want to force a new download, use `force_download=True`.
+  warnings.warn(
+/home/cup7/miniconda3/envs/zkllm-env/lib/python3.11/site-packages/transformers/utils/generic.py:309: FutureWarning: `torch.utils._pytree._register_pytree_node` is deprecated. Please use `torch.utils._pytree.register_pytree_node` instead.
+  _torch_pytree._register_pytree_node(
+Removed white space
+What
+Estimated tokens: 4370
+[llm] prompt saved to ./results/accuracy-zkllm/accuracy_pc+rl_zkllm_prompt_1.txt
+[llm] submitting initial optimization request for accuracy_pc+rl_zkllm
+[zkLLM] Loading meta-llama/Llama-2-7b-hf ...
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]Loading checkpoint shards:  50%|█████     | 1/2 [00:01<00:01,  1.74s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:02<00:00,  1.13s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:02<00:00,  1.22s/it]
+/home/cup7/miniconda3/envs/zkllm-env/lib/python3.11/site-packages/huggingface_hub/file_download.py:949: FutureWarning: `resume_download` is deprecated and will be removed in version 1.0.0. Downloads always resume when possible. If you want to force a new download, use `force_download=True`.
+  warnings.warn(
+/home/cup7/miniconda3/envs/zkllm-env/lib/python3.11/site-packages/transformers/generation/configuration_utils.py:394: UserWarning: `do_sample` is set to `False`. However, `top_p` is set to `0.9` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `top_p`.
+  warnings.warn(
+[zkLLM] Model loaded.
+[zkLLM] Generating response ...
+[zkLLM] Response: 513 tokens in 19.8s (25.85 tok/s).
+[zkLLM] Starting ZK proof pipeline ...
+[zkLLM] Stats saved to /home/cup7/opal/zkllm_proofs/proof_1777347518.json
+[zkLLM] Total: inference=19.8s  proof=2131.7s  total=2151.52s
+[llm] response saved to ./results/accuracy-zkllm/accuracy_pc+rl_zkllm_response_1.txt
+[info] Build-validation loop skipped (set --build_dir or provide a path in --build_script to enable).
+=== Finished accuracy_pc+rl at Tue Apr 28 03:38:39 AM UTC 2026 ===
+=== Starting sobol_ia at Tue Apr 28 03:38:39 AM UTC 2026 ===
+/home/cup7/miniconda3/envs/zkllm-env/lib/python3.11/site-packages/transformers/utils/generic.py:441: FutureWarning: `torch.utils._pytree._register_pytree_node` is deprecated. Please use `torch.utils._pytree.register_pytree_node` instead.
+  _torch_pytree._register_pytree_node(
+2026-04-28 03:38:43.700 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-04-28 03:38:43.750 
+  [33m[1mWarning:[0m to view this Streamlit app on a browser, run it with the following
+  command:
+
+    streamlit run opal_cli_codex.py [ARGUMENTS]
+2026-04-28 03:38:43.750 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-04-28 03:38:43.750 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+/home/cup7/miniconda3/envs/zkllm-env/lib/python3.11/site-packages/huggingface_hub/file_download.py:949: FutureWarning: `resume_download` is deprecated and will be removed in version 1.0.0. Downloads always resume when possible. If you want to force a new download, use `force_download=True`.
+  warnings.warn(
+/home/cup7/miniconda3/envs/zkllm-env/lib/python3.11/site-packages/transformers/utils/generic.py:309: FutureWarning: `torch.utils._pytree._register_pytree_node` is deprecated. Please use `torch.utils._pytree.register_pytree_node` instead.
+  _torch_pytree._register_pytree_node(
+Removed white space
+What
+Estimated tokens: 1710
+[llm] prompt saved to ./results/sobol-zkllm/sobol_ia_zkllm_prompt_1.txt
+[llm] submitting initial optimization request for sobol_ia_zkllm
+[zkLLM] Loading meta-llama/Llama-2-7b-hf ...
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]Loading checkpoint shards:  50%|█████     | 1/2 [00:01<00:01,  1.90s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:02<00:00,  1.21s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:02<00:00,  1.31s/it]
+/home/cup7/miniconda3/envs/zkllm-env/lib/python3.11/site-packages/huggingface_hub/file_download.py:949: FutureWarning: `resume_download` is deprecated and will be removed in version 1.0.0. Downloads always resume when possible. If you want to force a new download, use `force_download=True`.
+  warnings.warn(
+/home/cup7/miniconda3/envs/zkllm-env/lib/python3.11/site-packages/transformers/generation/configuration_utils.py:394: UserWarning: `do_sample` is set to `False`. However, `top_p` is set to `0.9` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `top_p`.
+  warnings.warn(
+[zkLLM] Model loaded.
+[zkLLM] Generating response ...
+[zkLLM] Response: 512 tokens in 19.9s (25.78 tok/s).
+[zkLLM] Starting ZK proof pipeline ...
+[zkLLM] Stats saved to /home/cup7/opal/zkllm_proofs/proof_1777349685.json
+[zkLLM] Total: inference=19.9s  proof=2133.1s  total=2152.99s
+[llm] response saved to ./results/sobol-zkllm/sobol_ia_zkllm_response_1.txt
+[info] Build-validation loop skipped (set --build_dir or provide a path in --build_script to enable).
+=== Finished sobol_ia at Tue Apr 28 04:14:46 AM UTC 2026 ===
+=== Starting sobol_pc+ia at Tue Apr 28 04:14:46 AM UTC 2026 ===
+/home/cup7/miniconda3/envs/zkllm-env/lib/python3.11/site-packages/transformers/utils/generic.py:441: FutureWarning: `torch.utils._pytree._register_pytree_node` is deprecated. Please use `torch.utils._pytree.register_pytree_node` instead.
+  _torch_pytree._register_pytree_node(
+2026-04-28 04:14:51.373 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-04-28 04:14:51.423 
+  [33m[1mWarning:[0m to view this Streamlit app on a browser, run it with the following
+  command:
+
+    streamlit run opal_cli_codex.py [ARGUMENTS]
+2026-04-28 04:14:51.423 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-04-28 04:14:51.423 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+/home/cup7/miniconda3/envs/zkllm-env/lib/python3.11/site-packages/huggingface_hub/file_download.py:949: FutureWarning: `resume_download` is deprecated and will be removed in version 1.0.0. Downloads always resume when possible. If you want to force a new download, use `force_download=True`.
+  warnings.warn(
+/home/cup7/miniconda3/envs/zkllm-env/lib/python3.11/site-packages/transformers/utils/generic.py:309: FutureWarning: `torch.utils._pytree._register_pytree_node` is deprecated. Please use `torch.utils._pytree.register_pytree_node` instead.
+  _torch_pytree._register_pytree_node(
+Removed white space
+What
+What
+Estimated tokens: 2242
+[llm] prompt saved to ./results/sobol-zkllm/sobol_pc+ia_zkllm_prompt_1.txt
+[llm] submitting initial optimization request for sobol_pc+ia_zkllm
+[zkLLM] Loading meta-llama/Llama-2-7b-hf ...
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]Loading checkpoint shards:  50%|█████     | 1/2 [00:01<00:01,  1.80s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:02<00:00,  1.19s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:02<00:00,  1.28s/it]
+/home/cup7/miniconda3/envs/zkllm-env/lib/python3.11/site-packages/huggingface_hub/file_download.py:949: FutureWarning: `resume_download` is deprecated and will be removed in version 1.0.0. Downloads always resume when possible. If you want to force a new download, use `force_download=True`.
+  warnings.warn(
+/home/cup7/miniconda3/envs/zkllm-env/lib/python3.11/site-packages/transformers/generation/configuration_utils.py:394: UserWarning: `do_sample` is set to `False`. However, `top_p` is set to `0.9` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `top_p`.
+  warnings.warn(
+[zkLLM] Model loaded.
+[zkLLM] Generating response ...
+[zkLLM] Response: 513 tokens in 19.8s (25.93 tok/s).
+[zkLLM] Starting ZK proof pipeline ...
+[zkLLM] Stats saved to /home/cup7/opal/zkllm_proofs/proof_1777351854.json
+[zkLLM] Total: inference=19.8s  proof=2136.6s  total=2156.42s
+[llm] response saved to ./results/sobol-zkllm/sobol_pc+ia_zkllm_response_1.txt
+[info] Build-validation loop skipped (set --build_dir or provide a path in --build_script to enable).
+=== Finished sobol_pc+ia at Tue Apr 28 04:50:56 AM UTC 2026 ===
+=== Starting shmembench_rl at Tue Apr 28 04:50:56 AM UTC 2026 ===
+/home/cup7/miniconda3/envs/zkllm-env/lib/python3.11/site-packages/transformers/utils/generic.py:441: FutureWarning: `torch.utils._pytree._register_pytree_node` is deprecated. Please use `torch.utils._pytree.register_pytree_node` instead.
+  _torch_pytree._register_pytree_node(
+/home/cup7/miniconda3/envs/zkllm-env/lib/python3.11/site-packages/huggingface_hub/file_download.py:949: FutureWarning: `resume_download` is deprecated and will be removed in version 1.0.0. Downloads always resume when possible. If you want to force a new download, use `force_download=True`.
+  warnings.warn(
+/home/cup7/miniconda3/envs/zkllm-env/lib/python3.11/site-packages/transformers/utils/generic.py:309: FutureWarning: `torch.utils._pytree._register_pytree_node` is deprecated. Please use `torch.utils._pytree.register_pytree_node` instead.
+  _torch_pytree._register_pytree_node(
+Removed white space
+Estimated tokens: 2008
+[llm] prompt saved to ./results/shmembench-zkllm/shmembench_rl_zkllm_prompt_1.txt
+[llm] submitting initial optimization request for shmembench_rl_zkllm
+[zkLLM] Loading meta-llama/Llama-2-7b-hf ...
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]Loading checkpoint shards:  50%|█████     | 1/2 [00:01<00:01,  1.90s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:02<00:00,  1.25s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:02<00:00,  1.35s/it]
+/home/cup7/miniconda3/envs/zkllm-env/lib/python3.11/site-packages/huggingface_hub/file_download.py:949: FutureWarning: `resume_download` is deprecated and will be removed in version 1.0.0. Downloads always resume when possible. If you want to force a new download, use `force_download=True`.
+  warnings.warn(
+/home/cup7/miniconda3/envs/zkllm-env/lib/python3.11/site-packages/transformers/generation/configuration_utils.py:394: UserWarning: `do_sample` is set to `False`. However, `top_p` is set to `0.9` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `top_p`.
+  warnings.warn(
+[zkLLM] Model loaded.
+[zkLLM] Generating response ...
+[zkLLM] Response: 514 tokens in 19.8s (25.92 tok/s).
+[zkLLM] Starting ZK proof pipeline ...
+[zkLLM] Stats saved to /home/cup7/opal/zkllm_proofs/proof_1777354022.json
+[zkLLM] Total: inference=19.8s  proof=2133.1s  total=2152.9s
+[llm] response saved to ./results/shmembench-zkllm/shmembench_rl_zkllm_response_1.txt
+[info] Build-validation loop skipped (set --build_dir or provide a path in --build_script to enable).
+=== Finished shmembench_rl at Tue Apr 28 05:27:04 AM UTC 2026 ===
+=== Starting shmembench_pc+rl+ia at Tue Apr 28 05:27:04 AM UTC 2026 ===
+/home/cup7/miniconda3/envs/zkllm-env/lib/python3.11/site-packages/transformers/utils/generic.py:441: FutureWarning: `torch.utils._pytree._register_pytree_node` is deprecated. Please use `torch.utils._pytree.register_pytree_node` instead.
+  _torch_pytree._register_pytree_node(
+2026-04-28 05:27:08.698 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-04-28 05:27:08.746 
+  [33m[1mWarning:[0m to view this Streamlit app on a browser, run it with the following
+  command:
+
+    streamlit run opal_cli_codex.py [ARGUMENTS]
+2026-04-28 05:27:08.746 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-04-28 05:27:08.746 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+/home/cup7/miniconda3/envs/zkllm-env/lib/python3.11/site-packages/huggingface_hub/file_download.py:949: FutureWarning: `resume_download` is deprecated and will be removed in version 1.0.0. Downloads always resume when possible. If you want to force a new download, use `force_download=True`.
+  warnings.warn(
+/home/cup7/miniconda3/envs/zkllm-env/lib/python3.11/site-packages/transformers/utils/generic.py:309: FutureWarning: `torch.utils._pytree._register_pytree_node` is deprecated. Please use `torch.utils._pytree.register_pytree_node` instead.
+  _torch_pytree._register_pytree_node(
+Removed white space
+What
+What
+Estimated tokens: 3058
+[llm] prompt saved to ./results/shmembench-zkllm/shmembench_pc+rl+ia_zkllm_prompt_1.txt
+[llm] submitting initial optimization request for shmembench_pc+rl+ia_zkllm
+[zkLLM] Loading meta-llama/Llama-2-7b-hf ...
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]Loading checkpoint shards:  50%|█████     | 1/2 [00:01<00:01,  1.78s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:02<00:00,  1.18s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:02<00:00,  1.27s/it]
+/home/cup7/miniconda3/envs/zkllm-env/lib/python3.11/site-packages/huggingface_hub/file_download.py:949: FutureWarning: `resume_download` is deprecated and will be removed in version 1.0.0. Downloads always resume when possible. If you want to force a new download, use `force_download=True`.
+  warnings.warn(
+/home/cup7/miniconda3/envs/zkllm-env/lib/python3.11/site-packages/transformers/generation/configuration_utils.py:394: UserWarning: `do_sample` is set to `False`. However, `top_p` is set to `0.9` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `top_p`.
+  warnings.warn(
+[zkLLM] Model loaded.
+[zkLLM] Generating response ...
+[zkLLM] Response: 512 tokens in 19.8s (25.87 tok/s).
+[zkLLM] Starting ZK proof pipeline ...
+[zkLLM] Stats saved to /home/cup7/opal/zkllm_proofs/proof_1777356188.json
+[zkLLM] Total: inference=19.8s  proof=2132.6s  total=2152.39s
+[llm] response saved to ./results/shmembench-zkllm/shmembench_pc+rl+ia_zkllm_response_1.txt
+[info] Build-validation loop skipped (set --build_dir or provide a path in --build_script to enable).
+=== Finished shmembench_pc+rl+ia at Tue Apr 28 06:03:10 AM UTC 2026 ===
+=== All configs complete at Tue Apr 28 06:03:10 AM UTC 2026 ===

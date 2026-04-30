@@ -1,0 +1,23 @@
+{
+  "model": "Llama-2-7b",
+  "seq_len": 2048,
+  "timestamp": 1777344964,
+  "prompt_tokens": 3353,
+  "response_tokens": 512,
+  "total_tokens": 3865,
+  "prompt_chars": 9633,
+  "inference_time_s": 19.82,
+  "tokens_per_sec": 25.83,
+  "response_chars": 1520,
+  "response_words": 163,
+  "has_code_block": false,
+  "code_block_lines": 0,
+  "code_block_chars": 0,
+  "proof_time_s": 68.65,
+  "proof_success": false,
+  "layers_proved": 0,
+  "proof_file_kb": 1.2,
+  "total_time_s": 88.47,
+  "stdout_tail": " proof complete.\nRescaling proof complete.\nSelf attention proof successfully verified!\n[0] Skip connection (post-attn)\nmake: 'skip-connection' is up to date.\n[0] RMSNorm (post-attention)\nmake: 'rmsnorm' is up to date.\nRescaling proof complete.\nRescaling proof complete.\nOpening complete\n[0] FFN\nmake: 'ffn' is up to date.\nRescaling proof complete.\nOpening complete\nRescaling proof complete.\nSwiGLU proof complete.\nRescaling proof complete.\nOpening complete\nRescaling proof complete.\nOpening complete\n",
+  "stderr_tail": "(most recent call last):\n  File \"/home/cup7/opal/zkllm/llama-ffn.py\", line 46, in <module>\n    os.remove('swiglu-table.bin')\nFileNotFoundError: [Errno 2] No such file or directory: 'swiglu-table.bin'\n"
+}

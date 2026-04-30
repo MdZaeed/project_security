@@ -1,0 +1,274 @@
+# Begin Source Code
+```cpp```
+1: #include <stdio.h>
+2: #include <stdlib.h>
+3: #include <chrono>
+4: #include <random>
+5: #include <cuda.h>
+6: #include <cub/cub.cuh>
+7: #include "reference.h"
+8:
+9: #define GPU_NUM_THREADS 256
+10:
+11: template <typename T>
+12: __device__ void BlockReduce(T &input) {
+13:   typedef cub::BlockReduce<T, GPU_NUM_THREADS> BlockReduce;
+14:   __shared__ typename BlockReduce::TempStorage temp_storage;
+15:   input = BlockReduce(temp_storage).Sum(input);
+16: }
+17:
+18: __global__
+19: void accuracy_kernel(
+20:     const int N,
+21:     const int D,
+22:     const int top_k,
+23:     const float* __restrict__ Xdata,
+24:     const int* __restrict__ labelData,
+25:     int* accuracy)
+26: {
+27:   int count = 0;
+28:
+29:   for (int row = blockIdx.x; row < N; row += gridDim.x) {
+30:     const int label = labelData[row];
+31:     const float label_pred = Xdata[row * D + label];
+32:     int ngt = 0;
+33:     for (int col = threadIdx.x; col < D; col += blockDim.x) {
+34:       const float pred = Xdata[row * D + col];
+35:       if (pred > label_pred || (pred == label_pred && col <= label)) {
+36:         ++ngt;
+37:       }
+38:     }
+39:     BlockReduce(ngt);
+40:     if (ngt <= top_k) {
+41:       ++count;
+42:     }
+43:     __syncthreads();
+44:   }
+45:   if (threadIdx.x == 0) {
+46:     atomicAdd(accuracy, count);
+47:   }
+48: }
+49:
+50:
+51: __global__
+52: void accuracy_kernel2(
+53:     const int N,
+54:     const int D,
+55:     const int top_k,
+56:     const float* __restrict__ Xdata,
+57:     const int*   __restrict__ labelData,
+58:     int* accuracy)
+59: {
+60:   __shared__ float s_label_pred;
+61:   __shared__ int s_label;
+62:
+63:   int count = 0;
+64:
+65:   for (int row = blockIdx.x; row < N; row += gridDim.x) {
+66:
+67:     if (threadIdx.x == 0) {
+68:       s_label = labelData[row];
+69:       s_label_pred = Xdata[row * D + s_label];
+70:     }
+71:     __syncthreads();
+72:
+73:     const int   label      = s_label;
+74:     const float label_pred = s_label_pred;
+75:
+76:     int ngt = 0;
+77:     const float* row_ptr = Xdata + row * D;
+78:     int col = threadIdx.x;
+79:     for (; col + 3 * blockDim.x < D; col += 4 * blockDim.x) {
+80:       float p0 = row_ptr[col];
+81:       float p1 = row_ptr[col +     blockDim.x];
+82:       float p2 = row_ptr[col + 2 * blockDim.x];
+83:       float p3 = row_ptr[col + 3 * blockDim.x];
+84:
+85:       ngt += (p0 > label_pred || (p0 == label_pred && col                   <= label));
+86:       ngt += (p1 > label_pred || (p1 == label_pred && col +     blockDim.x  <= label));
+87:       ngt += (p2 > label_pred || (p2 == label_pred && col + 2 * blockDim.x  <= label));
+88:       ngt += (p3 > label_pred || (p3 == label_pred && col + 3 * blockDim.x  <= label));
+89:     }
+90:     for (; col < D; col += blockDim.x) {
+91:       float pred = row_ptr[col];
+92:       ngt += (pred > label_pred || (pred == label_pred && col <= label));
+93:     }
+94:
+95:     BlockReduce(ngt);
+96:
+97:     if (threadIdx.x == 0 && ngt <= top_k) {
+98:       ++count;
+99:     }
+100:     __syncthreads();
+101:   }
+102:
+103:   if (threadIdx.x == 0 && count > 0) {
+104:     atomicAdd(accuracy, count);
+105:   }
+106: }
+107:
+108:
+109: int main(int argc, char* argv[])
+110: {
+111:   if (argc != 5) {
+112:     printf("Usage: %s <number of rows> <number of columns> <top K> <repeat>\n", argv[0]);
+113:     return 1;
+114:   }
+115:   const int nrows = atoi(argv[1]);
+116:   const int ndims = atoi(argv[2]);
+117:   const int top_k = atoi(argv[3]);
+118:   const int repeat = atoi(argv[4]);
+119:
+120:   const int data_size = nrows * ndims;
+121:
+122:   const int label_size_bytes = nrows * sizeof(int);
+123:   const size_t data_size_bytes = data_size * sizeof(float);
+124:
+125:   int *label = (int*) malloc (label_size_bytes);
+126:
+127:   srand(123);
+128:   for (int i = 0; i < nrows; i++)
+129:     label[i] = rand() % ndims;
+130:
+131:   float *data = (float*) malloc (data_size_bytes);
+132:
+133:   std::default_random_engine g (123);
+134:   std::uniform_real_distribution<float> distr (0.f, 1.f);
+135:   for (int i = 0; i < data_size; i++) {
+136:     data[i] = distr(g);
+137:   }
+138:
+139:   int count_ref = reference(nrows, ndims, top_k, data, label);
+140:
+141:   int *d_label;
+142:   cudaMalloc((void**)&d_label, label_size_bytes);
+143:   cudaMemcpy(d_label, label, label_size_bytes, cudaMemcpyHostToDevice);
+144:
+145:   float *d_data;
+146:   cudaMalloc((void**)&d_data, data_size_bytes);
+147:   cudaMemcpy(d_data, data, data_size_bytes, cudaMemcpyHostToDevice);
+148:
+149:   int *d_count;
+150:   cudaMalloc((void**)&d_count, sizeof(int));
+151:
+152:   cudaDeviceSynchronize();
+153:   dim3 block (GPU_NUM_THREADS);
+154:
+155:   for (int ngrid = nrows / 4; ngrid <= nrows; ngrid += nrows / 4) {
+156:
+157:     dim3 grid (ngrid);
+158:     printf("Grid size is %d\n", ngrid);
+159:
+160:     auto start = std::chrono::steady_clock::now();
+161:
+162:     for (int i = 0; i < repeat; i++) {
+163:       cudaMemset(d_count, 0, sizeof(int));
+164:       accuracy_kernel<<<grid, block>>>(nrows, ndims, top_k, d_data, d_label, d_count);
+165:     }
+166:
+167:     cudaDeviceSynchronize();
+168:     auto end = std::chrono::steady_clock::now();
+169:     auto time = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+170:     printf("Average execution time of accuracy kernel: %f (us)\n", (time * 1e-3f) / repeat);
+171:
+172:     int count;
+173:     cudaMemcpy(&count, d_count, sizeof(int), cudaMemcpyDeviceToHost);
+174:     printf("%s\n", (count == count_ref) ? "PASS" : "FAIL");
+175:
+176:
+177:     start = std::chrono::steady_clock::now();
+178:
+179:     for (int i = 0; i < repeat; i++) {
+180:       cudaMemset(d_count, 0, sizeof(int));
+181:       accuracy_kernel2<<<grid, block>>>(nrows, ndims, top_k, d_data, d_label, d_count);
+182:     }
+183:
+184:     cudaDeviceSynchronize();
+185:     end = std::chrono::steady_clock::now();
+186:     time = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+187:     printf("Average execution time of accuracy kernel2: %f (us)\n", (time * 1e-3f) / repeat);
+188:     cudaMemcpy(&count, d_count, sizeof(int), cudaMemcpyDeviceToHost);
+189:     printf("%s\n", (count == count_ref) ? "PASS" : "FAIL");
+190:   }
+191:
+192:   cudaFree(d_label);
+193:   cudaFree(d_data);
+194:   cudaFree(d_count);
+195:
+196:   free(label);
+197:   free(data);
+198:
+199:   return 0;
+200: }
+```cpp```
+# End Source Code
+# Begin Performance Analysis
+
+### COUNTER SUMMARY (CONFIGURED):
+[
+  {
+    "Kernel": "accuracy_kernel",
+    "Group Name": "lts_",
+    "Counter Name": "lts__t_sectors_evict_first_lookup_miss.sum",
+    "Value": 0.18932664926309384,
+    "Description": "Cache lookups that missed and had to be fetched from a slower memory tier, Memory sectors accessed, Store instructions in the LTS subsystem."
+  },
+  {
+    "Kernel": "accuracy_kernel",
+    "Group Name": "smsp_",
+    "Counter Name": "smsp__pcsamp_warps_issue_stalled_mio_throttle",
+    "Value": 0.20932630714416567,
+    "Description": "Store instructions, Time or events where execution was stalled in the SMSP subsystem."
+  },
+  {
+    "Kernel": "accuracy_kernel",
+    "Group Name": "smsp_",
+    "Counter Name": "smsp__pcsamp_warps_issue_stalled_mio_throttle_not_issued",
+    "Value": 0.19964970536352433,
+    "Description": "Store instructions, Time or events where execution was stalled in the SMSP subsystem."
+  }
+]
+
+# End Performance Analysis
+
+
+# Begin H100 Optimization Guidance
+Optimize specifically for NVIDIA H100 (Hopper) by targeting L2/cache reuse, HBM3 bandwidth, and Tensor Core throughput. Prioritize tiling and data locality: make global accesses coalesced/contiguous, reuse data from registers/shared memory/L2, and reduce redundant global traffic. Use Hopper async pipelines to hide memory latency: stage global→shared with cp.async / cuda::memcpy_async using double/triple buffering so loads overlap compute; keep the pipeline full instead of blocking on loads. If compute is matrix/attention-like, map work to Tensor Cores (WMMA/CUTLASS/cuBLASLt) and use mixed precision (FP16/BF16/TF32, FP8 when numerically safe) to increase throughput. Tune launch configuration to avoid occupancy cliffs: pick block sizes that sustain high occupancy without excessive register pressure or shared-memory usage; avoid large per-thread local arrays that cause spills. Reduce warp inefficiency: minimize divergence, expensive atomics, and unnecessary __syncthreads(); prefer warp-level primitives and cooperative groups where applicable. If memory-bound, reduce passes and consider fusion/batching to increase L2 hit rate; if compute-bound, increase ILP, unroll judiciously, and favor FMA-friendly instruction patterns.
+# End H100 Optimization Guidance
+
+# Begin Entrypoint Guardrails
+Entrypoint guardrails:
+1. The source already contains 1 main() definition(s). Preserve exactly that many main() definitions.
+2. Do NOT add a new main(), duplicate main(), rename main(), or move logic into a second entry point.
+3. Do NOT add wrapper executables, test harnesses, helper mains, or alternate standalone programs.
+4. Keep the existing top-level program structure intact; only optimize within the existing file structure.
+5. Do NOT change externally referenced function names or break linkage between existing declarations and definitions.
+# End Entrypoint Guardrails
+# Instructions
+You must optimize the source code provided above using only the performance data provided above. 
+
+Optimize the following HPC code for execution time. You must define mathematical preconditions and postconditions, provide explicit loop invariants to guarantee semantic equivalence, and provide a logical proof showing why the invariants remain unbroken after your structural optimization.
+Can you give me the fixed optimized code that will replace the full source code including headers and main function body?
+2. Do not add line numbers to the generated code. 
+3. Do not rename or duplicate any kernel or function.
+4. Do not change any function signatures.
+5. Preserve the existing entry-point structure exactly. If the file already has main(), keep exactly one equivalent main(); if it does not, do not add one.
+6. Do not add duplicate definitions for main or for any externally linked function.
+7. Do not turn declarations into disconnected definitions or break declaration/definition linkage.
+8. Keep all changes inside the existing kernel/function bodies whenever possible.
+9. Do NOT introduce any new helper functions, utility functions, macros, templates, classes, structs, global variables, or other new top-level symbols outside the existing kernels/functions.
+10. Do NOT add wrapper load helpers such as ro(), custom ldg wrappers, or any new reusable abstraction outside the existing kernel/function body.
+11. Do NOT increase the total shared-memory footprint of any kernel beyond the original source. Do not enlarge existing __shared__ arrays, do not add new shared-memory tiles, and prefer register/cache/read-only load optimizations over larger shared-memory staging.
+12. Use the performance analysis reference number(s) to guide your changes.
+13. The first fenced code block must be the full compilable replacement source file.
+14. Whitespace-only, formatting-only, comment-only, or reorder-only rewrites are invalid and must not be returned as optimized code.
+15. When the performance data supports it, apply at least one substantive performance-motivated code change in the code itself.
+16. If no safe substantive optimization can be justified from the provided performance data, keep the code semantically unchanged and say so explicitly in the `optimizations` list instead of claiming changes that were not applied.
+17. Return:
+   (a) the full source code including the optimized kernels inside ``` block (starts with ``` and ends with ``` )
+   (b) optimizations list = [{'lines': [...], 'reason': '...'}]
+   (c) suggested_but_not_applied list = [{'lines': [...], 'reason': '...'}]
+18. Do not generate more than one copy of the same kernel.
+19. Do not invent any new kernels or placeholder code.
+
+ONLY respond with the updated code and two structured lists. No explanation, no notes, no markdown titles. Follow this format exactly.

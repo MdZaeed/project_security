@@ -1,0 +1,25 @@
+/home/cup7/miniconda3/envs/zkllm-env/lib/python3.11/site-packages/transformers/utils/generic.py:441: FutureWarning: `torch.utils._pytree._register_pytree_node` is deprecated. Please use `torch.utils._pytree.register_pytree_node` instead.
+  _torch_pytree._register_pytree_node(
+/home/cup7/miniconda3/envs/zkllm-env/lib/python3.11/site-packages/huggingface_hub/file_download.py:949: FutureWarning: `resume_download` is deprecated and will be removed in version 1.0.0. Downloads always resume when possible. If you want to force a new download, use `force_download=True`.
+  warnings.warn(
+/home/cup7/miniconda3/envs/zkllm-env/lib/python3.11/site-packages/transformers/utils/generic.py:309: FutureWarning: `torch.utils._pytree._register_pytree_node` is deprecated. Please use `torch.utils._pytree.register_pytree_node` instead.
+  _torch_pytree._register_pytree_node(
+Removed white space
+What
+Estimated tokens: 4370
+[llm] prompt saved to ./results/accuracy-zkllm/accuracy_pc+rl_zkllm_prompt_1.txt
+[llm] submitting initial optimization request for accuracy_pc+rl_zkllm
+[zkLLM] Loading meta-llama/Llama-2-7b-hf ...
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]Loading checkpoint shards:  50%|█████     | 1/2 [00:01<00:01,  1.61s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:02<00:00,  1.04s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:02<00:00,  1.13s/it]
+/home/cup7/miniconda3/envs/zkllm-env/lib/python3.11/site-packages/huggingface_hub/file_download.py:949: FutureWarning: `resume_download` is deprecated and will be removed in version 1.0.0. Downloads always resume when possible. If you want to force a new download, use `force_download=True`.
+  warnings.warn(
+/home/cup7/miniconda3/envs/zkllm-env/lib/python3.11/site-packages/transformers/generation/configuration_utils.py:394: UserWarning: `do_sample` is set to `False`. However, `top_p` is set to `0.9` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `top_p`.
+  warnings.warn(
+[zkLLM] Model loaded.
+[zkLLM] Generating response ...
+[zkLLM] Response: 513 tokens in 19.8s (25.87 tok/s).
+[zkLLM] Starting ZK proof pipeline ...
+[zkLLM] Stats saved to /home/cup7/opal/zkllm_proofs/proof_1777344907.json
+[zkLLM] Total: inference=19.8s  proof=11.5s  total=31.36s
+[llm] response saved to ./results/accuracy-zkllm/accuracy_pc+rl_zkllm_response_1.txt
+[info] Build-validation loop skipped (set --build_dir or provide a path in --build_script to enable).

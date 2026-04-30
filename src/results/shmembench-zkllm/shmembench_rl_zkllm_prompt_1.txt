@@ -1,0 +1,170 @@
+# Begin Source Code
+```cpp```
+1:
+6:
+7: #include <chrono>
+8: #include <stdio.h>
+9:
+10: using namespace std::chrono;
+11:
+12: #define TOTAL_ITERATIONS (1024)
+13: #define BLOCK_SIZE 256
+14:
+15:
+16: __device__ void shmem_swap(float4 *v1, float4 *v2){
+17:   float4 tmp;
+18:   tmp = *v2;
+19:   *v2 = *v1;
+20:   *v1 = tmp;
+21: }
+22:
+23: __device__ float4 init_val(int i){
+24:   return make_float4(i, i+11, i+19, i+23);
+25: }
+26:
+27: __device__ float4 reduce_vector(float4 v1, float4 v2, float4 v3, float4 v4, float4 v5, float4 v6){
+28:   return make_float4(v1.x + v2.x + v3.x + v4.x + v5.x + v6.x,
+29:                      v1.y + v2.y + v3.y + v4.y + v5.y + v6.y,
+30:                      v1.z + v2.z + v3.z + v4.z + v5.z + v6.z,
+31:                      v1.w + v2.w + v3.w + v4.w + v5.w + v6.w);
+32: }
+33:
+34: __device__ void set_vector(float4 *target, int offset, float4 v){
+35:   target[offset].x = v.x;
+36:   target[offset].y = v.y;
+37:   target[offset].z = v.z;
+38:   target[offset].w = v.w;
+39: }
+40:
+41:
+42: __global__ void benchmark_shmem(float4 *g_data){
+43:
+44:   __shared__ float4 shm_buffer[BLOCK_SIZE*6];
+45:
+46:   int tid = threadIdx.x;
+47:   int globaltid = blockIdx.x*blockDim.x + tid;
+48:   set_vector(shm_buffer, tid+0*blockDim.x, init_val(tid));
+49:   set_vector(shm_buffer, tid+1*blockDim.x, init_val(tid+1));
+50:   set_vector(shm_buffer, tid+2*blockDim.x, init_val(tid+3));
+51:   set_vector(shm_buffer, tid+3*blockDim.x, init_val(tid+7));
+52:   set_vector(shm_buffer, tid+4*blockDim.x, init_val(tid+13));
+53:   set_vector(shm_buffer, tid+5*blockDim.x, init_val(tid+17));
+54:
+55:   __syncthreads();
+56:
+57:   #pragma unroll 32
+58:   for(int j=0; j<TOTAL_ITERATIONS; j++){
+59:     shmem_swap(shm_buffer+tid+0*blockDim.x, shm_buffer+tid+1*blockDim.x);
+60:     shmem_swap(shm_buffer+tid+2*blockDim.x, shm_buffer+tid+3*blockDim.x);
+61:     shmem_swap(shm_buffer+tid+4*blockDim.x, shm_buffer+tid+5*blockDim.x);
+62:
+63:     __syncthreads();
+64:
+65:     shmem_swap(shm_buffer+tid+1*blockDim.x, shm_buffer+tid+2*blockDim.x);
+66:     shmem_swap(shm_buffer+tid+3*blockDim.x, shm_buffer+tid+4*blockDim.x);
+67:
+68:     __syncthreads();
+69:   }
+70:
+71:   g_data[globaltid] = reduce_vector(shm_buffer[tid+0*blockDim.x],
+72:                                     shm_buffer[tid+1*blockDim.x],
+73:                                     shm_buffer[tid+2*blockDim.x],
+74:                                     shm_buffer[tid+3*blockDim.x],
+75:                                     shm_buffer[tid+4*blockDim.x],
+76:                                     shm_buffer[tid+5*blockDim.x]);
+77: }
+78:
+79: void shmembenchGPU(double *c, const long size, const int repeat) {
+80:   const int TOTAL_BLOCKS = size/(BLOCK_SIZE);
+81:
+82:   double *cd;
+83:   cudaMalloc((void**)&cd, size*sizeof(double));
+84:
+85:   dim3 dimBlock(BLOCK_SIZE, 1, 1);
+86:   dim3 dimGrid_f4(TOTAL_BLOCKS/4, 1, 1);
+87:
+88:   auto start = high_resolution_clock::now();
+89:
+90:   for (int i = 0; i < repeat; i++)
+91:     benchmark_shmem<<< dimGrid_f4, dimBlock >>>((float4*)cd);
+92:
+93:   cudaDeviceSynchronize();
+94:   auto end = high_resolution_clock::now();
+95:   auto time_shmem_128b = duration_cast<nanoseconds>(end - start).count() / (double)repeat;
+96:   printf("Average kernel execution time : %f (ms)\n", time_shmem_128b * 1e-6);
+97:
+98:
+99:   cudaMemcpy(c, cd, size*sizeof(double), cudaMemcpyDeviceToHost);
+100:   cudaFree(cd);
+101:
+102:
+103:   double sum = 0;
+104:   for (long i = 0; i < size; i++) sum += c[i];
+105:   if (sum != 21256458760384741137729978368.00)
+106:     printf("checksum failed\n");
+107:
+108:   printf("Memory throughput\n");
+109:   const long long operations_bytes  = (6LL+4*5*TOTAL_ITERATIONS+6)*size*sizeof(float);
+110:   const long long operations_128bit = (6LL+4*5*TOTAL_ITERATIONS+6)*size/4;
+111:
+112:   printf("\tusing 128bit operations : %8.2f GB/sec (%6.2f billion accesses/sec)\n",
+113:     (double)operations_bytes / time_shmem_128b,
+114:     (double)operations_128bit / time_shmem_128b);
+115: }
+```cpp```
+# End Source Code
+# Begin Performance Analysis
+
+### ROOFLINE SUMMARY (CONFIGURED):
+{
+  "benchmark_shmem(float4 *)": [
+    "All compute pipelines are under-utilized. Either this kernel is very small or it doesn't issue enough warps per scheduler. Check the Launch Statistics and Scheduler Statistics sections for further details.",
+    "A wave of thread blocks is defined as the maximum number of blocks that can be executed in parallel on the target GPU. The number of blocks in a wave depends on the number of multiprocessors and the theoretical occupancy of the kernel. This kernel launch results in 1 full waves and a partial wave of 111 thread blocks. Under the assumption of a uniform execution duration of all thread blocks, the partial wave may account for up to 50.0% of the total kernel runtime with a lower occupancy of 29.3%. Try launching a grid with no partial wave. The overall impact of this tail effect also lessens with the number of full waves executed for a grid. See the Hardware Model (https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-hw-model) description for more details on launch configurations.",
+    "Every scheduler is capable of issuing one instruction per cycle, but for this kernel each scheduler only issues an instruction every 14.7 cycles. This might leave hardware resources underutilized and may lead to less optimal performance. Out of the maximum of 16 warps per scheduler, this kernel allocates an average of 11.32 active warps per scheduler, but only an average of 0.35 warps were eligible per cycle. Eligible warps are the subset of active warps that are ready to issue their next instruction. Every cycle with no eligible warp results in no instruction being issued and the issue slot remains unused. To increase the number of eligible warps, reduce the time the active warps are stalled by inspecting the top stall reasons on the Warp State Statistics and Source Counters sections.",
+    "The difference between calculated theoretical (100.0%) and measured achieved occupancy (70.7%) can be the result of warp scheduling overheads or workload imbalances during the kernel execution. Load imbalances can occur between warps within a block as well as across blocks of the same kernel. See the CUDA Best Practices Guide (https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html#occupancy) for more details on optimizing occupancy.",
+    "On average, each warp of this kernel spends 75.8 cycles being stalled waiting for the MIO (memory input/output) instruction queue to be not full. This stall reason is high in cases of extreme utilization of the MIO pipelines, which include special math instructions, dynamic branches, as well as shared memory instructions. When caused by shared memory accesses, trying to use fewer but wider loads can reduce pipeline pressure. This stall type represents about 45.6% of the total average of 166.5 cycles between issuing two instructions."
+  ]
+}
+
+# End Performance Analysis
+
+
+# Begin H100 Optimization Guidance
+Optimize specifically for NVIDIA H100 (Hopper) by targeting L2/cache reuse, HBM3 bandwidth, and Tensor Core throughput. Prioritize tiling and data locality: make global accesses coalesced/contiguous, reuse data from registers/shared memory/L2, and reduce redundant global traffic. Use Hopper async pipelines to hide memory latency: stage global→shared with cp.async / cuda::memcpy_async using double/triple buffering so loads overlap compute; keep the pipeline full instead of blocking on loads. If compute is matrix/attention-like, map work to Tensor Cores (WMMA/CUTLASS/cuBLASLt) and use mixed precision (FP16/BF16/TF32, FP8 when numerically safe) to increase throughput. Tune launch configuration to avoid occupancy cliffs: pick block sizes that sustain high occupancy without excessive register pressure or shared-memory usage; avoid large per-thread local arrays that cause spills. Reduce warp inefficiency: minimize divergence, expensive atomics, and unnecessary __syncthreads(); prefer warp-level primitives and cooperative groups where applicable. If memory-bound, reduce passes and consider fusion/batching to increase L2 hit rate; if compute-bound, increase ILP, unroll judiciously, and favor FMA-friendly instruction patterns.
+# End H100 Optimization Guidance
+
+# Begin Entrypoint Guardrails
+Entrypoint guardrails:
+1. The source does not contain a main() definition. Do NOT introduce one.
+2. Do NOT add wrapper executables, test harnesses, helper mains, or alternate standalone programs.
+3. Keep the existing top-level program structure intact; only optimize within the existing file structure.
+4. Do NOT change externally referenced function names or break linkage between existing declarations and definitions.
+# End Entrypoint Guardrails
+# Instructions
+You must optimize the source code provided above using only the performance data provided above. 
+
+Optimize the following HPC code for execution time. You must define mathematical preconditions and postconditions, provide explicit loop invariants to guarantee semantic equivalence, and provide a logical proof showing why the invariants remain unbroken after your structural optimization.
+Can you give me the fixed optimized code that will replace the full source code including headers and main function body?
+2. Do not add line numbers to the generated code. 
+3. Do not rename or duplicate any kernel or function.
+4. Do not change any function signatures.
+5. Preserve the existing entry-point structure exactly. If the file already has main(), keep exactly one equivalent main(); if it does not, do not add one.
+6. Do not add duplicate definitions for main or for any externally linked function.
+7. Do not turn declarations into disconnected definitions or break declaration/definition linkage.
+8. Keep all changes inside the existing kernel/function bodies whenever possible.
+9. Do NOT introduce any new helper functions, utility functions, macros, templates, classes, structs, global variables, or other new top-level symbols outside the existing kernels/functions.
+10. Do NOT add wrapper load helpers such as ro(), custom ldg wrappers, or any new reusable abstraction outside the existing kernel/function body.
+11. Do NOT increase the total shared-memory footprint of any kernel beyond the original source. Do not enlarge existing __shared__ arrays, do not add new shared-memory tiles, and prefer register/cache/read-only load optimizations over larger shared-memory staging.
+12. Use the performance analysis reference number(s) to guide your changes.
+13. The first fenced code block must be the full compilable replacement source file.
+14. Whitespace-only, formatting-only, comment-only, or reorder-only rewrites are invalid and must not be returned as optimized code.
+15. When the performance data supports it, apply at least one substantive performance-motivated code change in the code itself.
+16. If no safe substantive optimization can be justified from the provided performance data, keep the code semantically unchanged and say so explicitly in the `optimizations` list instead of claiming changes that were not applied.
+17. Return:
+   (a) the full source code including the optimized kernels inside ``` block (starts with ``` and ends with ``` )
+   (b) optimizations list = [{'lines': [...], 'reason': '...'}]
+   (c) suggested_but_not_applied list = [{'lines': [...], 'reason': '...'}]
+18. Do not generate more than one copy of the same kernel.
+19. Do not invent any new kernels or placeholder code.
+
+ONLY respond with the updated code and two structured lists. No explanation, no notes, no markdown titles. Follow this format exactly.

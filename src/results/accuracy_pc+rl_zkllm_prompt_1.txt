@@ -1,0 +1,879 @@
+# Begin Source Code
+```cpp```
+1: #include <stdio.h>
+2: #include <stdlib.h>
+3: #include <chrono>
+4: #include <random>
+5: #include <cuda.h>
+6: #include <cub/cub.cuh>
+7: #include "reference.h"
+8:
+9: #define GPU_NUM_THREADS 256
+10:
+11: template <typename T>
+12: __device__ void BlockReduce(T &input) {
+13:   typedef cub::BlockReduce<T, GPU_NUM_THREADS> BlockReduce;
+14:   __shared__ typename BlockReduce::TempStorage temp_storage;
+15:   input = BlockReduce(temp_storage).Sum(input);
+16: }
+17:
+18: __global__
+19: void accuracy_kernel(
+20:     const int N,
+21:     const int D,
+22:     const int top_k,
+23:     const float* __restrict__ Xdata,
+24:     const int* __restrict__ labelData,
+25:     int* accuracy)
+26: {
+27:   int count = 0;
+28:
+29:   for (int row = blockIdx.x; row < N; row += gridDim.x) {
+30:     const int label = labelData[row];
+31:     const float label_pred = Xdata[row * D + label];
+32:     int ngt = 0;
+33:     for (int col = threadIdx.x; col < D; col += blockDim.x) {
+34:       const float pred = Xdata[row * D + col];
+35:       if (pred > label_pred || (pred == label_pred && col <= label)) {
+36:         ++ngt;
+37:       }
+38:     }
+39:     BlockReduce(ngt);
+40:     if (ngt <= top_k) {
+41:       ++count;
+42:     }
+43:     __syncthreads();
+44:   }
+45:   if (threadIdx.x == 0) {
+46:     atomicAdd(accuracy, count);
+47:   }
+48: }
+49:
+50:
+51: __global__
+52: void accuracy_kernel2(
+53:     const int N,
+54:     const int D,
+55:     const int top_k,
+56:     const float* __restrict__ Xdata,
+57:     const int*   __restrict__ labelData,
+58:     int* accuracy)
+59: {
+60:   __shared__ float s_label_pred;
+61:   __shared__ int s_label;
+62:
+63:   int count = 0;
+64:
+65:   for (int row = blockIdx.x; row < N; row += gridDim.x) {
+66:
+67:     if (threadIdx.x == 0) {
+68:       s_label = labelData[row];
+69:       s_label_pred = Xdata[row * D + s_label];
+70:     }
+71:     __syncthreads();
+72:
+73:     const int   label      = s_label;
+74:     const float label_pred = s_label_pred;
+75:
+76:     int ngt = 0;
+77:     const float* row_ptr = Xdata + row * D;
+78:     int col = threadIdx.x;
+79:     for (; col + 3 * blockDim.x < D; col += 4 * blockDim.x) {
+80:       float p0 = row_ptr[col];
+81:       float p1 = row_ptr[col +     blockDim.x];
+82:       float p2 = row_ptr[col + 2 * blockDim.x];
+83:       float p3 = row_ptr[col + 3 * blockDim.x];
+84:
+85:       ngt += (p0 > label_pred || (p0 == label_pred && col                   <= label));
+86:       ngt += (p1 > label_pred || (p1 == label_pred && col +     blockDim.x  <= label));
+87:       ngt += (p2 > label_pred || (p2 == label_pred && col + 2 * blockDim.x  <= label));
+88:       ngt += (p3 > label_pred || (p3 == label_pred && col + 3 * blockDim.x  <= label));
+89:     }
+90:     for (; col < D; col += blockDim.x) {
+91:       float pred = row_ptr[col];
+92:       ngt += (pred > label_pred || (pred == label_pred && col <= label));
+93:     }
+94:
+95:     BlockReduce(ngt);
+96:
+97:     if (threadIdx.x == 0 && ngt <= top_k) {
+98:       ++count;
+99:     }
+100:     __syncthreads();
+101:   }
+102:
+103:   if (threadIdx.x == 0 && count > 0) {
+104:     atomicAdd(accuracy, count);
+105:   }
+106: }
+107:
+108:
+109: int main(int argc, char* argv[])
+110: {
+111:   if (argc != 5) {
+112:     printf("Usage: %s <number of rows> <number of columns> <top K> <repeat>\n", argv[0]);
+113:     return 1;
+114:   }
+115:   const int nrows = atoi(argv[1]);
+116:   const int ndims = atoi(argv[2]);
+117:   const int top_k = atoi(argv[3]);
+118:   const int repeat = atoi(argv[4]);
+119:
+120:   const int data_size = nrows * ndims;
+121:
+122:   const int label_size_bytes = nrows * sizeof(int);
+123:   const size_t data_size_bytes = data_size * sizeof(float);
+124:
+125:   int *label = (int*) malloc (label_size_bytes);
+126:
+127:   srand(123);
+128:   for (int i = 0; i < nrows; i++)
+129:     label[i] = rand() % ndims;
+130:
+131:   float *data = (float*) malloc (data_size_bytes);
+132:
+133:   std::default_random_engine g (123);
+134:   std::uniform_real_distribution<float> distr (0.f, 1.f);
+135:   for (int i = 0; i < data_size; i++) {
+136:     data[i] = distr(g);
+137:   }
+138:
+139:   int count_ref = reference(nrows, ndims, top_k, data, label);
+140:
+141:   int *d_label;
+142:   cudaMalloc((void**)&d_label, label_size_bytes);
+143:   cudaMemcpy(d_label, label, label_size_bytes, cudaMemcpyHostToDevice);
+144:
+145:   float *d_data;
+146:   cudaMalloc((void**)&d_data, data_size_bytes);
+147:   cudaMemcpy(d_data, data, data_size_bytes, cudaMemcpyHostToDevice);
+148:
+149:   int *d_count;
+150:   cudaMalloc((void**)&d_count, sizeof(int));
+151:
+152:   cudaDeviceSynchronize();
+153:   dim3 block (GPU_NUM_THREADS);
+154:
+155:   for (int ngrid = nrows / 4; ngrid <= nrows; ngrid += nrows / 4) {
+156:
+157:     dim3 grid (ngrid);
+158:     printf("Grid size is %d\n", ngrid);
+159:
+160:     auto start = std::chrono::steady_clock::now();
+161:
+162:     for (int i = 0; i < repeat; i++) {
+163:       cudaMemset(d_count, 0, sizeof(int));
+164:       accuracy_kernel<<<grid, block>>>(nrows, ndims, top_k, d_data, d_label, d_count);
+165:     }
+166:
+167:     cudaDeviceSynchronize();
+168:     auto end = std::chrono::steady_clock::now();
+169:     auto time = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+170:     printf("Average execution time of accuracy kernel: %f (us)\n", (time * 1e-3f) / repeat);
+171:
+172:     int count;
+173:     cudaMemcpy(&count, d_count, sizeof(int), cudaMemcpyDeviceToHost);
+174:     printf("%s\n", (count == count_ref) ? "PASS" : "FAIL");
+175:
+176:
+177:     start = std::chrono::steady_clock::now();
+178:
+179:     for (int i = 0; i < repeat; i++) {
+180:       cudaMemset(d_count, 0, sizeof(int));
+181:       accuracy_kernel2<<<grid, block>>>(nrows, ndims, top_k, d_data, d_label, d_count);
+182:     }
+183:
+184:     cudaDeviceSynchronize();
+185:     end = std::chrono::steady_clock::now();
+186:     time = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+187:     printf("Average execution time of accuracy kernel2: %f (us)\n", (time * 1e-3f) / repeat);
+188:     cudaMemcpy(&count, d_count, sizeof(int), cudaMemcpyDeviceToHost);
+189:     printf("%s\n", (count == count_ref) ? "PASS" : "FAIL");
+190:   }
+191:
+192:   cudaFree(d_label);
+193:   cudaFree(d_data);
+194:   cudaFree(d_count);
+195:
+196:   free(label);
+197:   free(data);
+198:
+199:   return 0;
+200: }
+```cpp```
+# End Source Code
+# Begin Performance Analysis
+
+### PC SUMMARY (CONFIGURED):
+[
+  {
+    "Line No": 43,
+    "Source": "}",
+    "Stall Reasons": [
+      "stall_membar_ratio",
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 41,
+    "Source": "atomicAdd(accuracy, count);",
+    "Stall Reasons": [
+      "stall_branch_resolving_ratio",
+      "stall_no_inst_ratio",
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 40,
+    "Source": "if (threadIdx.x == 0) { ",
+    "Stall Reasons": [
+      "stall_wait_ratio",
+      "stall_short_sb_ratio"
+    ]
+  },
+  {
+    "Line No": 38,
+    "Source": "__syncthreads();",
+    "Stall Reasons": [
+      "stall_branch_resolving_ratio",
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 36,
+    "Source": "++count;",
+    "Stall Reasons": [
+      "stall_branch_resolving_ratio",
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 35,
+    "Source": "if (ngt <= top_k) {",
+    "Stall Reasons": [
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 34,
+    "Source": "ngt = BlockReduce(temp_storage).Sum(ngt);",
+    "Stall Reasons": [
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 31,
+    "Source": "++ngt;",
+    "Stall Reasons": [
+      "stall_branch_resolving_ratio",
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 30,
+    "Source": "if (pred > label_pred || (pred == label_pred && col <= label)) {",
+    "Stall Reasons": [
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 29,
+    "Source": "const float pred = Xdata[row * D + col];",
+    "Stall Reasons": [
+      "stall_long_sb_ratio",
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 28,
+    "Source": "for (int col = threadIdx.x; col < D; col += blockDim.x) {",
+    "Stall Reasons": [
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 27,
+    "Source": "int ngt = 0;",
+    "Stall Reasons": [
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 26,
+    "Source": "const float label_pred = Xdata[row * D + label];",
+    "Stall Reasons": [
+      "stall_long_sb_ratio",
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 25,
+    "Source": "const int label = labelData[row];",
+    "Stall Reasons": [
+      "stall_long_sb_ratio",
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 24,
+    "Source": "for (int row = blockIdx.x; row < N; row += gridDim.x) {",
+    "Stall Reasons": [
+      "stall_barrier_ratio"
+    ]
+  },
+  {
+    "Line No": 22,
+    "Source": "int count = 0;",
+    "Stall Reasons": [
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 12,
+    "Source": "void accuracy_kernel(",
+    "Stall Reasons": [
+      "stall_wait_ratio",
+      "stall_short_sb_ratio"
+    ]
+  },
+  {
+    "Line No": 502,
+    "Source": "return InternalBlockReduce(temp_storage).template Sum<true>(input, BLOCK_THREADS);",
+    "Stall Reasons": [
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 304,
+    "Source": "linear_tid(RowMajorTid(BLOCK_DIM_X, BLOCK_DIM_Y, BLOCK_DIM_Z))",
+    "Stall Reasons": [
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 303,
+    "Source": "temp_storage(temp_storage.Alias()),",
+    "Stall Reasons": [
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 182,
+    "Source": "return ApplyWarpAggregates<FULL_TILE>(reduction_op, warp_aggregate, num_valid);",
+    "Stall Reasons": [
+      "stall_long_sb_ratio",
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 179,
+    "Source": "cub::Sum());",
+    "Stall Reasons": [
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 176,
+    "Source": "T warp_aggregate = WarpReduce(temp_storage.warp_reduce[warp_id]).template Reduce<(FULL_TILE && EVEN_WARP_MULTIPLE)>(",
+    "Stall Reasons": [
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 171,
+    "Source": "int         warp_num_valid = ((FULL_TILE && EVEN_WARP_MULTIPLE) || (warp_offset + LOGICAL_WARP_SIZE <= num_valid)) ?",
+    "Stall Reasons": [
+      "stall_branch_resolving_ratio",
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 159,
+    "Source": "return warp_aggregate;",
+    "Stall Reasons": [
+      "stall_branch_resolving_ratio",
+      "stall_long_sb_ratio",
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 156,
+    "Source": "warp_aggregate = ApplyWarpAggregates<FULL_TILE>(reduction_op, warp_aggregate, num_valid, Int2Type<1>());",
+    "Stall Reasons": [
+      "stall_no_inst_ratio",
+      "stall_long_sb_ratio",
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 154,
+    "Source": "if (linear_tid == 0)",
+    "Stall Reasons": [
+      "stall_barrier_ratio",
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 151,
+    "Source": "CTA_SYNC();",
+    "Stall Reasons": [
+      "stall_branch_resolving_ratio",
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 147,
+    "Source": "detail::uninitialized_copy(temp_storage.warp_aggregates + warp_id,",
+    "Stall Reasons": [
+      "stall_long_sb_ratio",
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 145,
+    "Source": "if (lane_id == 0)",
+    "Stall Reasons": [
+      "stall_long_sb_ratio",
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 131,
+    "Source": "return warp_aggregate;",
+    "Stall Reasons": [
+      "stall_branch_resolving_ratio",
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 121,
+    "Source": "return ApplyWarpAggregates<FULL_TILE>(reduction_op, warp_aggregate, num_valid, Int2Type<SUCCESSOR_WARP + 1>());",
+    "Stall Reasons": [
+      "stall_long_sb_ratio",
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 119,
+    "Source": "warp_aggregate = reduction_op(warp_aggregate, addend);",
+    "Stall Reasons": [
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 118,
+    "Source": "T addend = temp_storage.warp_aggregates[SUCCESSOR_WARP];",
+    "Stall Reasons": [
+      "stall_wait_ratio",
+      "stall_long_sb_ratio"
+    ]
+  },
+  {
+    "Line No": 105,
+    "Source": "lane_id(LaneId())",
+    "Stall Reasons": [
+      "stall_branch_resolving_ratio",
+      "stall_no_inst_ratio",
+      "stall_wait_ratio",
+      "stall_short_sb_ratio"
+    ]
+  },
+  {
+    "Line No": 104,
+    "Source": "warp_id((WARPS == 1) ? 0 : linear_tid / WARP_THREADS),",
+    "Stall Reasons": [
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 103,
+    "Source": "linear_tid(RowMajorTid(BLOCK_DIM_X, BLOCK_DIM_Y, BLOCK_DIM_Z)),",
+    "Stall Reasons": [
+      "stall_wait_ratio",
+      "stall_long_sb_ratio"
+    ]
+  },
+  {
+    "Line No": 102,
+    "Source": "temp_storage(temp_storage.Alias()),",
+    "Stall Reasons": [
+      "stall_wait_ratio",
+      "stall_long_sb_ratio"
+    ]
+  },
+  {
+    "Line No": 57,
+    "Source": "}",
+    "Stall Reasons": [
+      "stall_branch_resolving_ratio",
+      "stall_long_sb_ratio",
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 56,
+    "Source": "*ptr = ::cuda::std::forward<U>(val);",
+    "Stall Reasons": [
+      "stall_wait_ratio",
+      "stall_long_sb_ratio"
+    ]
+  },
+  {
+    "Line No": 54,
+    "Source": "__host__ __device__ void uninitialized_copy(T *ptr, U &&val)",
+    "Stall Reasons": [
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 648,
+    "Source": "return output;",
+    "Stall Reasons": [
+      "stall_long_sb_ratio",
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 642,
+    "Source": "for (int WORD = 1; WORD < WORDS; ++WORD)",
+    "Stall Reasons": [
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 639,
+    "Source": "output_alias[0] = shuffle_word;",
+    "Stall Reasons": [
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 638,
+    "Source": "shuffle_word    = SHFL_DOWN_SYNC((unsigned int)input_alias[0], src_offset, last_thread | SHFL_C, member_mask);",
+    "Stall Reasons": [
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 635,
+    "Source": "ShuffleWord     *input_alias    = reinterpret_cast<ShuffleWord *>(&input);",
+    "Stall Reasons": [
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 634,
+    "Source": "ShuffleWord     *output_alias   = reinterpret_cast<ShuffleWord *>(&output);",
+    "Stall Reasons": [
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 631,
+    "Source": "const int       WORDS           = (sizeof(T) + sizeof(ShuffleWord) - 1) / sizeof(ShuffleWord);",
+    "Stall Reasons": [
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 468,
+    "Source": "return member_mask;",
+    "Stall Reasons": [
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 460,
+    "Source": "unsigned int member_mask = 0xFFFFFFFFu >>",
+    "Stall Reasons": [
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 458,
+    "Source": "constexpr bool is_arch_warp  = LOGICAL_WARP_THREADS == CUB_WARP_THREADS(0);",
+    "Stall Reasons": [
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 457,
+    "Source": "constexpr bool is_pow_of_two = PowerOfTwo<LOGICAL_WARP_THREADS>::VALUE;",
+    "Stall Reasons": [
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 427,
+    "Source": "return ret;",
+    "Stall Reasons": [
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 426,
+    "Source": "asm (mov.u32 %0, %%laneid; : =r(ret) );",
+    "Stall Reasons": [
+      "stall_branch_resolving_ratio",
+      "stall_wait_ratio",
+      "stall_short_sb_ratio"
+    ]
+  },
+  {
+    "Line No": 416,
+    "Source": "threadIdx.x;",
+    "Stall Reasons": [
+      "stall_wait_ratio",
+      "stall_short_sb_ratio"
+    ]
+  },
+  {
+    "Line No": 415,
+    "Source": "((block_dim_y == 1) ? 0 : (threadIdx.y * block_dim_x)) +",
+    "Stall Reasons": [
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 414,
+    "Source": "return ((block_dim_z == 1) ? 0 : (threadIdx.z * block_dim_x * block_dim_y)) +",
+    "Stall Reasons": [
+      "stall_branch_resolving_ratio",
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 347,
+    "Source": "return word;",
+    "Stall Reasons": [
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 346,
+    "Source": ": =r(word) : r(word), r(src_offset), r(flags), r(member_mask));",
+    "Stall Reasons": [
+      "stall_branch_resolving_ratio",
+      "stall_wait_ratio",
+      "stall_short_sb_ratio"
+    ]
+  },
+  {
+    "Line No": 270,
+    "Source": "__syncthreads();",
+    "Stall Reasons": [
+      "stall_branch_resolving_ratio",
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 717,
+    "Source": "return reinterpret_cast<T&>(*this);",
+    "Stall Reasons": [
+      "stall_branch_resolving_ratio",
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 530,
+    "Source": "Int2Type<ALL_LANES_VALID>{}, input, valid_items, reduction_op);",
+    "Stall Reasons": [
+      "stall_long_sb_ratio",
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 529,
+    "Source": "return ReduceImpl(",
+    "Stall Reasons": [
+      "stall_long_sb_ratio",
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 451,
+    "Source": "return output;",
+    "Stall Reasons": [
+      "stall_long_sb_ratio",
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 449,
+    "Source": "ReduceStep(output, reduction_op, last_lane, Int2Type<0>());",
+    "Stall Reasons": [
+      "stall_long_sb_ratio",
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 446,
+    "Source": "T output = input;",
+    "Stall Reasons": [
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 444,
+    "Source": "int last_lane = LOGICAL_WARP_THREADS - 1;",
+    "Stall Reasons": [
+      "stall_branch_resolving_ratio",
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 405,
+    "Source": "ReduceStep(input, reduction_op, last_lane, Int2Type<STEP + 1>());",
+    "Stall Reasons": [
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 403,
+    "Source": "input = ReduceStep(input, reduction_op, last_lane, 1 << STEP, Int2Type<IsInteger<T>::IS_SMALL_UNSIGNED>());",
+    "Stall Reasons": [
+      "stall_long_sb_ratio",
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 388,
+    "Source": "return ReduceStep(input, reduction_op, last_lane, offset);",
+    "Stall Reasons": [
+      "stall_long_sb_ratio",
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 362,
+    "Source": "return output;",
+    "Stall Reasons": [
+      "stall_branch_resolving_ratio",
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 360,
+    "Source": "output = reduction_op(input, temp);",
+    "Stall Reasons": [
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 359,
+    "Source": "if (offset + lane_id <= last_lane)",
+    "Stall Reasons": [
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 356,
+    "Source": "_T temp = ShuffleDown<LOGICAL_WARP_THREADS>(output, offset, last_lane, member_mask);",
+    "Stall Reasons": [
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 354,
+    "Source": "_T output = input;",
+    "Stall Reasons": [
+      "stall_long_sb_ratio",
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 150,
+    "Source": ", member_mask(WarpMask<LOGICAL_WARP_THREADS>(warp_id))",
+    "Stall Reasons": [
+      "stall_long_sb_ratio",
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 149,
+    "Source": ", warp_id(IS_ARCH_WARP ? 0 : (lane_id / LOGICAL_WARP_THREADS))",
+    "Stall Reasons": [
+      "stall_wait_ratio",
+      "stall_long_sb_ratio"
+    ]
+  },
+  {
+    "Line No": 148,
+    "Source": ": lane_id(static_cast<int>(LaneId()))",
+    "Stall Reasons": [
+      "stall_wait_ratio",
+      "stall_long_sb_ratio"
+    ]
+  },
+  {
+    "Line No": 53,
+    "Source": "auto operator()(_T1&& __t, _T2&& __u) const",
+    "Stall Reasons": [
+      "stall_wait_ratio"
+    ]
+  },
+  {
+    "Line No": 107,
+    "Source": "return __iAtomicAdd(address, val);",
+    "Stall Reasons": [
+      "stall_branch_resolving_ratio",
+      "stall_long_sb_ratio",
+      "stall_wait_ratio"
+    ]
+  }
+]
+
+### ROOFLINE SUMMARY (CONFIGURED):
+{
+  "accuracy_kernel(int, int, int, const float *, const int *, int *)": [
+    "All compute pipelines are under-utilized. Either this kernel is very small or it doesn't issue enough warps per scheduler. Check the Launch Statistics and Scheduler Statistics sections for further details.",
+    "The memory access pattern for loads from device memory causes 10,242,626 sectors to be read from DRAM, which is 1.0x of the 10,233,293 sectors which cause a miss in the L2 cache. The DRAM fetch granularity for read misses in L2 is 64 bytes, i.e. the lower or upper half of an L2 cache line. Try changing your access pattern to make use of both sectors returned by a DRAM read request for optimal usage of the DRAM throughput. For strided memory reads, avoid strides of 64 bytes or larger to avoid moving unused sectors from DRAM to L2. ",
+    "On average, each warp of this kernel spends 40.1 cycles being stalled waiting for a scoreboard dependency on a L1TEX (local, global, surface, texture) operation. Find the instruction producing the data being waited upon to identify the culprit. To reduce the number of cycles waiting on L1TEX data accesses verify the memory access patterns are optimal for the target architecture, attempt to increase cache hit rates by increasing data locality (coalescing), or by changing the cache configuration. Consider moving frequently used data to shared memory. This stall type represents about 83.2% of the total average of 48.2 cycles between issuing two instructions.",
+    "Every scheduler is capable of issuing one instruction per cycle, but for this kernel each scheduler only issues an instruction every 3.5 cycles. This might leave hardware resources underutilized and may lead to less optimal performance. Out of the maximum of 16 warps per scheduler, this kernel allocates an average of 13.65 active warps per scheduler, but only an average of 0.40 warps were eligible per cycle. Eligible warps are the subset of active warps that are ready to issue their next instruction. Every cycle with no eligible warp results in no instruction being issued and the issue slot remains unused. To increase the number of eligible warps, avoid possible load imbalances due to highly different execution durations per warp. Reducing stalls indicated on the Warp State Statistics and Source Counters sections can help, too.",
+    "The difference between calculated theoretical (100.0%) and measured achieved occupancy (82.9%) can be the result of warp scheduling overheads or workload imbalances during the kernel execution. Load imbalances can occur between warps within a block as well as across blocks of the same kernel. See the CUDA Best Practices Guide (https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html#occupancy) for more details on optimizing occupancy."
+  ]
+}
+
+# End Performance Analysis
+
+
+# Begin H100 Optimization Guidance
+Optimize specifically for NVIDIA H100 (Hopper) by targeting L2/cache reuse, HBM3 bandwidth, and Tensor Core throughput. Prioritize tiling and data locality: make global accesses coalesced/contiguous, reuse data from registers/shared memory/L2, and reduce redundant global traffic. Use Hopper async pipelines to hide memory latency: stage global→shared with cp.async / cuda::memcpy_async using double/triple buffering so loads overlap compute; keep the pipeline full instead of blocking on loads. If compute is matrix/attention-like, map work to Tensor Cores (WMMA/CUTLASS/cuBLASLt) and use mixed precision (FP16/BF16/TF32, FP8 when numerically safe) to increase throughput. Tune launch configuration to avoid occupancy cliffs: pick block sizes that sustain high occupancy without excessive register pressure or shared-memory usage; avoid large per-thread local arrays that cause spills. Reduce warp inefficiency: minimize divergence, expensive atomics, and unnecessary __syncthreads(); prefer warp-level primitives and cooperative groups where applicable. If memory-bound, reduce passes and consider fusion/batching to increase L2 hit rate; if compute-bound, increase ILP, unroll judiciously, and favor FMA-friendly instruction patterns.
+# End H100 Optimization Guidance
+
+# Begin Entrypoint Guardrails
+Entrypoint guardrails:
+1. The source already contains 1 main() definition(s). Preserve exactly that many main() definitions.
+2. Do NOT add a new main(), duplicate main(), rename main(), or move logic into a second entry point.
+3. Do NOT add wrapper executables, test harnesses, helper mains, or alternate standalone programs.
+4. Keep the existing top-level program structure intact; only optimize within the existing file structure.
+5. Do NOT change externally referenced function names or break linkage between existing declarations and definitions.
+# End Entrypoint Guardrails
+# Instructions
+You must optimize the source code provided above using only the performance data provided above. 
+
+Optimize the following HPC code for execution time. You must define mathematical preconditions and postconditions, provide explicit loop invariants to guarantee semantic equivalence, and provide a logical proof showing why the invariants remain unbroken after your structural optimization.
+Can you give me the fixed optimized code that will replace the full source code including headers and main function body?
+2. Do not add line numbers to the generated code. 
+3. Do not rename or duplicate any kernel or function.
+4. Do not change any function signatures.
+5. Preserve the existing entry-point structure exactly. If the file already has main(), keep exactly one equivalent main(); if it does not, do not add one.
+6. Do not add duplicate definitions for main or for any externally linked function.
+7. Do not turn declarations into disconnected definitions or break declaration/definition linkage.
+8. Keep all changes inside the existing kernel/function bodies whenever possible.
+9. Do NOT introduce any new helper functions, utility functions, macros, templates, classes, structs, global variables, or other new top-level symbols outside the existing kernels/functions.
+10. Do NOT add wrapper load helpers such as ro(), custom ldg wrappers, or any new reusable abstraction outside the existing kernel/function body.
+11. Do NOT increase the total shared-memory footprint of any kernel beyond the original source. Do not enlarge existing __shared__ arrays, do not add new shared-memory tiles, and prefer register/cache/read-only load optimizations over larger shared-memory staging.
+12. Use the performance analysis reference number(s) to guide your changes.
+13. The first fenced code block must be the full compilable replacement source file.
+14. Whitespace-only, formatting-only, comment-only, or reorder-only rewrites are invalid and must not be returned as optimized code.
+15. When the performance data supports it, apply at least one substantive performance-motivated code change in the code itself.
+16. If no safe substantive optimization can be justified from the provided performance data, keep the code semantically unchanged and say so explicitly in the `optimizations` list instead of claiming changes that were not applied.
+17. Return:
+   (a) the full source code including the optimized kernels inside ``` block (starts with ``` and ends with ``` )
+   (b) optimizations list = [{'lines': [...], 'reason': '...'}]
+   (c) suggested_but_not_applied list = [{'lines': [...], 'reason': '...'}]
+18. Do not generate more than one copy of the same kernel.
+19. Do not invent any new kernels or placeholder code.
+
+ONLY respond with the updated code and two structured lists. No explanation, no notes, no markdown titles. Follow this format exactly.

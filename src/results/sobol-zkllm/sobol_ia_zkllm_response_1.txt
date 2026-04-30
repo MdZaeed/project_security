@@ -1,0 +1,18 @@
+",
+    "Value": 0.00000000000000000,
+    "Description": "Texture cache or texture unit behavior in the L1TEX subsystem. A high value indicates excessive write traffic from L1/TEX units to the GPU's crossbar, potentially saturating internal bandwidth. Causes stalls like stall_l1tex or stall_memory_dependency. Do not suggest __int_as_float for faster integer to float conversion"
+  },
+  {
+    "Kernel": "sobolGPU_kernel(unsigned_int__unsigned_int__unsigned_int_*__float_*)",
+    "Group Name": "N_TCC",
+    "Counter Name": "l1tex__m_l1tex2xbar_write_bytes.sum.pct.pct",
+    "Value": 0.00000000000000000,
+    "Description": "Texture cache or texture unit behavior in the L1TEX subsystem. A high value indicates excessive write traffic from L1/TEX units to the GPU's crossbar, potentially saturating internal bandwidth. Causes stalls like stall_l1tex or stall_memory_dependency. Do not suggest __int_as_float for faster integer to float conversion"
+  },
+  {
+    "Kernel": "sobolGPU_kernel(unsigned_int__unsigned_int__unsigned_int_*__float_*)",
+    "Group Name": "N_TCC",
+    "Counter Name": "l1tex__m_l1tex2xbar_write_bytes.sum.pct.pct.pct",
+    "Value": 0.00000000000000000,
+    "Description": "Texture cache or texture unit behavior in the L1TEX subsystem. A high value indicates excessive write traffic from L1/TEX units to the GPU's crossbar, potentially saturating internal bandwidth. Causes stalls like stall_l1tex or stall_memory_dependency. Do not suggest __int_as_float for faster integer to float conversion"
+  },

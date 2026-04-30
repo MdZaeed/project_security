@@ -1,0 +1,23 @@
+{
+  "model": "Llama-2-7b",
+  "seq_len": 2048,
+  "timestamp": 1777356188,
+  "prompt_tokens": 7389,
+  "response_tokens": 512,
+  "total_tokens": 7901,
+  "prompt_chars": 19670,
+  "inference_time_s": 19.79,
+  "tokens_per_sec": 25.87,
+  "response_chars": 1129,
+  "response_words": 103,
+  "has_code_block": false,
+  "code_block_lines": 0,
+  "code_block_chars": 0,
+  "proof_time_s": 2132.6,
+  "proof_success": true,
+  "layers_proved": 33,
+  "proof_file_kb": 1.2,
+  "total_time_s": 2152.39,
+  "stdout_tail": "kip-connection' is up to date.\n[31] RMSNorm (post-attention)\nmake: 'rmsnorm' is up to date.\nRescaling proof complete.\nRescaling proof complete.\nOpening complete\n[31] FFN\nmake: 'ffn' is up to date.\nRescaling proof complete.\nOpening complete\nRescaling proof complete.\nSwiGLU proof complete.\nRescaling proof complete.\nOpening complete\nRescaling proof complete.\nOpening complete\n[31] Skip connection (post-FFN)\nmake: 'skip-connection' is up to date.\n[31] Done.\n\n=== All 32 layers proved successfully ===\n",
+  "stderr_tail": "s/utils/generic.py:441: FutureWarning: `torch.utils._pytree._register_pytree_node` is deprecated. Please use `torch.utils._pytree.register_pytree_node` instead.\n  _torch_pytree._register_pytree_node(\n"
+}

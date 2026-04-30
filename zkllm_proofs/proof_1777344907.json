@@ -1,0 +1,23 @@
+{
+  "model": "Llama-2-7b",
+  "seq_len": 2048,
+  "timestamp": 1777344907,
+  "prompt_tokens": 10652,
+  "response_tokens": 513,
+  "total_tokens": 11165,
+  "prompt_chars": 27479,
+  "inference_time_s": 19.83,
+  "tokens_per_sec": 25.87,
+  "response_chars": 956,
+  "response_words": 77,
+  "has_code_block": false,
+  "code_block_lines": 0,
+  "code_block_chars": 0,
+  "proof_time_s": 11.53,
+  "proof_success": false,
+  "layers_proved": 0,
+  "proof_file_kb": 1.2,
+  "total_time_s": 31.36,
+  "stdout_tail": "=== zkLLM Proof Pipeline ===\nModel: LLaMA-2-7b | Layers: 32 | Seq len: 2048\n\n--- Layer 0 / 31 ---\n[0] RMSNorm (input)\nmake: 'rmsnorm' is up to date.\nRescaling proof complete.\nRescaling proof complete.\nOpening complete\n",
+  "stderr_tail": "t recent call last):\n  File \"/home/cup7/opal/zkllm/llama-rmsnorm.py\", line 47, in <module>\n    os.remove('rms_inv_temp.bin')\nFileNotFoundError: [Errno 2] No such file or directory: 'rms_inv_temp.bin'\n"
+}
