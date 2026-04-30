@@ -234,7 +234,7 @@ The CUDA proof kernels are written specifically for the LLaMA-2 transformer arch
 | Model | VRAM required | Breakdown |
 |-------|--------------|-----------|
 | LLaMA-2 7B | ~52 GB | ~16 GB model weights + ~26 GB proof intermediates + ~10 GB packages/runtime |
-| LLaMA-2 13B | ~120 GB | same breakdown, scaled |
+| LLaMA-2 13B | ~120 GB | ~36 GB model weights + ~76 GB proof intermediates + ~10 GB packages/runtime |
 
 **Context length is hard-capped at 2048 tokens**
 The proof pipeline pads every input sequence to exactly 2048 tokens regardless of actual length. Requesting a response longer than 2048 tokens causes the proof to go out of bounds and fail. This means the combined prompt + response must fit within 2048 tokens.
